@@ -6,9 +6,12 @@ import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Union
+from typing import List, Union
 
 import pandas as pd
+from bs4 import BeautifulSoup
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelBinarizer
 
 logging.basicConfig(
     format="[%(asctime)s] %(levelname)-8s %(name)-15s %(message)s",
@@ -17,7 +20,7 @@ logging.basicConfig(
 logger = logging.getLogger("datapipeline")
 
 SAVE = True
-OVERWRITE = False
+OVERWRITE = True
 
 DATA_PATH = Path(".").absolute() / "data"
 RAW_DATA_PATH = DATA_PATH / "raw"
@@ -33,19 +36,22 @@ class Datapipeline:
         >>> pipe = pipe.save(pipe.df, output_file_path, output_filename)
     """
 
-    df: pd.DataFrame = None
+    df_train: pd.DataFrame = None
+    df_val: pd.DataFrame = None
+    df_test: pd.DataFrame = None
 
     @classmethod
     def load(cls, data_path: Union[Path, str] = RAW_DATA_PATH) -> pd.DataFrame:
         """
         load raw text
         clean text
+        split data into train, val, test sets
 
         Args:
             data_path (Union[Path, str], optional): path to data folder. Defaults to RAW_DATA_PATH.
 
         Returns:
-            pd.DataFrame: data
+            pd.DataFrame: train, val, test dataset
         """
         logger.info("loading raw data")
         text = []
@@ -71,10 +77,16 @@ class Datapipeline:
 
         df = pd.DataFrame({"text": text, "label": label})
 
-        logger.info("cleaning text")
-        df["cleaned_text"] = df["text"].apply(cls.clean_text)
+        df = df.drop_duplicates(keep="first", ignore_index=True)
 
-        return cls(df=df)
+        df = cls.label_binariser(df, "label")
+
+        logger.info("cleaning text")
+        df["text"] = df["text"].apply(cls.remove_html)
+        df["cleaned_text"] = df["text"].apply(cls.clean_text)
+        df_train, df_val, df_test = cls.train_test_val_split(df)
+
+        return cls(df_train=df_train, df_val=df_val, df_test=df_test)
 
     @staticmethod
     def clean_text(text: str) -> str:
@@ -111,6 +123,59 @@ class Datapipeline:
         return text
 
     @staticmethod
+    def remove_html(text: str) -> str:
+        """
+        remove html artifacts from text
+
+        Args:
+            text (str): text in data
+
+        Returns:
+            str: text without html formatting
+        """
+
+        soup = BeautifulSoup(text, "lxml")
+        return soup.text
+
+    @staticmethod
+    def label_binariser(df: pd.DataFrame, columns: Union[List, str]) -> pd.DataFrame:
+        """
+        change label into 1 (pos) and 0 (neg)
+
+        Args:
+            df (pd.DataFrame): dataset
+            columns (Union[List, str]): column names to be binarised
+
+        Returns:
+            pd.DataFrame: dataset with binarised dataset
+        """
+        logger.info("binarising label")
+        lb = LabelBinarizer()
+        df[columns] = lb.fit_transform(df[columns])
+        return df
+
+    @staticmethod
+    def train_test_val_split(df: pd.DataFrame) -> pd.DataFrame:
+        """
+        perform splitting of data into train, val, test
+
+        Args:
+            df (pd.DataFrame): entire dataset
+
+        Returns:
+            pd.DataFrame: data in train, val, test sets
+        """
+        logger.info("splitting data")
+        df_val, df_test = train_test_split(
+            df, test_size=0.1, stratify=df["label"], random_state=18
+        )
+        df_train, df_val = train_test_split(
+            df_val, test_size=0.1, stratify=df_val["label"], random_state=18
+        )
+
+        return df_train, df_val, df_test
+
+    @staticmethod
     def save(data: pd.DataFrame, output_file_path: Path, output_filename: str) -> None:
         """
         save data as a csv file
@@ -140,13 +205,12 @@ if __name__ == "__main__":
 
     output_data_path = PROCESSED_DATA_PATH / "data.csv"
 
-    if output_data_path.exists() and not OVERWRITE:
-        logger.info(
-            "%s exist, please load it from filesystem",
-            output_data_path.name,
-        )
-    else:
-        pipe = Datapipeline.load()
+    pipe = Datapipeline.load()
 
-        if SAVE:
-            pipe.save(pipe.df, PROCESSED_DATA_PATH, "data.csv")
+    if SAVE:
+        for class_variable in list(vars(pipe).keys()):
+            pipe.save(
+                data=getattr(pipe, class_variable),
+                output_file_path=PROCESSED_DATA_PATH,
+                output_filename=f"{class_variable}",
+            )
