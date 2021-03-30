@@ -1,14 +1,22 @@
+import logging
 from dataclasses import dataclass
 from typing import List
 
 import pandas as pd
 import tensorflow as tf
+from sklearn.metrics import accuracy_score
 from tensorflow.keras.layers import GRU, LSTM, Dense, Embedding
 from tensorflow.keras.models import Sequential
 from transformers import (BertTokenizer, InputExample, InputFeatures,
                           TFBertForSequenceClassification)
 
 from src.datapipeline import PROCESSED_DATA_PATH
+
+logging.basicConfig(
+    format="[%(asctime)s] %(levelname)-8s %(name)-15s %(message)s",
+    level=logging.INFO,
+)
+logger = logging.getLogger("bert_model")
 
 model = TFBertForSequenceClassification.from_pretrained("bert-base-uncased")
 tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
@@ -19,17 +27,22 @@ class BertModel:
     df_train: pd.DataFrame = pd.read_csv(PROCESSED_DATA_PATH / "df_train.csv")
     df_val: pd.DataFrame = pd.read_csv(PROCESSED_DATA_PATH / "df_val.csv")
     df_test: pd.DataFrame = pd.read_csv(PROCESSED_DATA_PATH / "df_test.csv")
+    model: TFBertForSequenceClassification = None
 
     def build(self):
         optimizer = tf.keras.optimizers.Adam(0.001)
-        model.compile(
+        self.model.compile(
             optimizer=optimizer, loss="binary_crossentropy", metrics=["accuracy"]
         )
-        model.summary()
-        return model
 
+    def train(self, train: pd.DataFrame, val: pd.DataFrame, epochs: int = 2):
+        self.model.fit(train, epochs=epochs, validation_data=val)
+
+    def evaluate(self, test: pd.DataFrame):
+        self.model.evaluate(test)
+
+    @staticmethod
     def convert_data_to_examples(
-        self,
         train: pd.DataFrame,
         val: pd.DataFrame,
         test: pd.DataFrame,
@@ -62,6 +75,7 @@ class BertModel:
 
         return train_InputExamples, validation_InputExamples, test_InputExamples
 
+    @staticmethod
     def convert_examples_to_tf_dataset(
         examples: List[InputExample], tokenizer: BertTokenizer, max_length: int = 128
     ):

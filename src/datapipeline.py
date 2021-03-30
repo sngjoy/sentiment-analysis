@@ -10,6 +10,7 @@ from typing import List, Union
 
 import pandas as pd
 from bs4 import BeautifulSoup
+from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelBinarizer
 
