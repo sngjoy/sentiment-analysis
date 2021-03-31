@@ -11,10 +11,9 @@ import logging
 from dataclasses import dataclass
 
 import pandas as pd
-from sklearn.pipeline import Pipeline
-from sklearn.linear_model import LogisticRegression
 from sklearn.feature_extraction.text import TfidfVectorizer
-
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import Pipeline
 
 from src.datapipeline import PROCESSED_DATA_PATH
 
@@ -23,6 +22,7 @@ logging.basicConfig(
     level=logging.INFO,
 )
 logger = logging.getLogger("baseline_model")
+
 
 @dataclass
 class BaselineModel:
@@ -35,18 +35,13 @@ class BaselineModel:
     df_val: pd.DataFrame = pd.read_csv(PROCESSED_DATA_PATH / "df_val.csv")
     df_test: pd.DataFrame = pd.read_csv(PROCESSED_DATA_PATH / "df_test.csv")
     model: Pipeline = Pipeline(
-        [
-            ('vectorise', TfidfVectorizer()), 
-            ('lr', LogisticRegression())
-        ]
+        [("vectorise", TfidfVectorizer()), ("lr", LogisticRegression())]
     )
 
     def train(self) -> None:
-        """Fitting model to training set
-        """
+        """Fitting model to training set"""
         logger.info("fitting model")
-        self.model.fit(self.df_train['cleaned_text'], self.df_train['label'])
-        
+        self.model.fit(self.df_train["cleaned_text"], self.df_train["label"])
 
     def evaluate(self) -> float:
         """Evalute model on test set
@@ -56,8 +51,9 @@ class BaselineModel:
         """
 
         logger.info("evaluating model")
-        accuracy = self.model.score(self.df_test['cleaned_text'], self.df_test['label'])
+        accuracy = self.model.score(self.df_test["cleaned_text"], self.df_test["label"])
         return accuracy
+
 
 if __name__ == "__main__":
     base = BaselineModel()
