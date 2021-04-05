@@ -10,7 +10,8 @@ from typing import List, Union
 
 import pandas as pd
 from bs4 import BeautifulSoup
-from sklearn.metrics import accuracy_score
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelBinarizer
 
@@ -26,6 +27,8 @@ OVERWRITE = True
 DATA_PATH = Path(".").absolute() / "data"
 RAW_DATA_PATH = DATA_PATH / "raw"
 PROCESSED_DATA_PATH = DATA_PATH / "processed"
+stop_words = stopwords.words("english")
+wordnet_lemmatizer = WordNetLemmatizer()
 
 # pylint: disable=invalid-name
 @dataclass
@@ -84,7 +87,7 @@ class Datapipeline:
 
         logger.info("cleaning text")
         df["text"] = df["text"].apply(cls.remove_html)
-        df["cleaned_text"] = df["text"].apply(cls.clean_text)
+        df["cleaned_text"] = df["text"].apply(cls.clean_text).apply(cls.lemma_text)
         df_train, df_val, df_test = cls.train_test_val_split(df)
 
         return cls(df_train=df_train, df_val=df_val, df_test=df_test)
@@ -137,6 +140,25 @@ class Datapipeline:
 
         soup = BeautifulSoup(text, "lxml")
         return soup.text
+
+    @staticmethod
+    def lemma_text(text: str) -> str:
+        """lemmatise text and remove stopwords
+
+        Args:
+            text (str): text
+
+        Returns:
+            str: lemmatised text without stopwords
+        """
+        text = " ".join(
+            [
+                wordnet_lemmatizer.lemmatize(word)
+                for word in text.split()
+                if word not in stop_words
+            ]
+        )
+        return text
 
     @staticmethod
     def label_binariser(df: pd.DataFrame, columns: Union[List, str]) -> pd.DataFrame:
