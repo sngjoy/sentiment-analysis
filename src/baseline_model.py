@@ -51,12 +51,15 @@ class BaselineModel:
         """
 
         logger.info("evaluating model")
-        accuracy = self.model.score(self.df_test["cleaned_text"], self.df_test["label"])
-        return accuracy
+        train_acc = self.model.score(
+            self.df_train["cleaned_text"], self.df_train["label"]
+        )
+        test_acc = self.model.score(self.df_test["cleaned_text"], self.df_test["label"])
+        return train_acc, test_acc
 
 
 if __name__ == "__main__":
     base = BaselineModel()
     base.train()
-    acc = base.evaluate()
-    logger.info("accuracy: %f", acc)
+    train_acc, test_acc = base.evaluate()
+    logger.info("train accuracy: %f; test accuracy: %f", train_acc, test_acc)
