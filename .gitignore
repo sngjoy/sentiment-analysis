@@ -1,0 +1,4 @@
+data
+model
+.pre-commit-config*
+__pycache__
