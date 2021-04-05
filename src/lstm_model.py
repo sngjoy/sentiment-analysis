@@ -11,6 +11,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 from tensorflow.keras.layers import LSTM, Dense, Embedding
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.preprocessing.sequence import pad_sequences
@@ -30,18 +31,19 @@ class LSTMModel:
 
     df_train: pd.DataFrame = pd.read_csv(
         PROCESSED_DATA_PATH / "df_train.csv", usecols=["cleaned_text", "label"]
-    )[:200]
+    )
     df_val: pd.DataFrame = pd.read_csv(
         PROCESSED_DATA_PATH / "df_val.csv", usecols=["cleaned_text", "label"]
-    )[:100]
+    )
     df_test: pd.DataFrame = pd.read_csv(
         PROCESSED_DATA_PATH / "df_test.csv", usecols=["cleaned_text", "label"]
-    )[:100]
+    )
     train_pad: np.ndarray = None
     val_pad: np.ndarray = None
     test_pad: np.ndarray = None
     vocab_size: int = None
     max_length: int = None
+    model: tf.keras.Model = None
 
     def tokenise(self) -> None:
         """
@@ -55,7 +57,7 @@ class LSTMModel:
         tokenizer.fit_on_texts(
             self.df_train["cleaned_text"]
         )  # creates a vocabulary index based on word frequency
-        max_length = 500
+        max_length = 150
 
         # transforms each text in texts to a sequence of integers.
         train_token = tokenizer.texts_to_sequences(self.df_train["cleaned_text"])
@@ -80,13 +82,13 @@ class LSTMModel:
             [
                 Embedding(
                     input_dim=self.vocab_size,
-                    output_dim=32,
+                    output_dim=64,
                     input_length=self.max_length,
                 ),
                 LSTM(
-                    units=64,
-                    dropout=0.2,  # units to drop for the linear trf of input
-                    recurrent_dropout=0.2,  # units to drop for the linear trf of recurrent state
+                    units=50,
+                    dropout=0.1,  # units to drop for the linear trf of input
+                    recurrent_dropout=0.1,  # units to drop for the linear trf of recurrent state
                 ),
                 Dense(32, activation="relu"),
                 Dense(16, activation="relu"),
@@ -97,9 +99,10 @@ class LSTMModel:
         model.compile(
             optimizer=optimizer, loss="binary_crossentropy", metrics=["accuracy"]
         )
+        model.summary()
         self.model = model
 
-    def train(self, epochs: int, batch_size: int = 128) -> None:
+    def train(self, epochs: int, batch_size: int = 256) -> None:
         """
         fit LSTM model to train set
 
@@ -109,12 +112,26 @@ class LSTMModel:
         """
 
         logger.info("fitting model")
+
+        early_stopping = EarlyStopping(
+            monitor="val_accuracy", mode="max", verbose=1, patience=5, min_delta=0.0001
+        )
+
+        checkpoint = ModelCheckpoint(
+            filepath="model",
+            monitor="val_accuracy",
+            verbose=1,
+            save_best_only=True,
+            mode="max",
+        )
+
         self.model.fit(
             self.train_pad,
             self.df_train["label"],
             epochs=epochs,
             batch_size=batch_size,
             validation_data=(self.val_pad, self.df_val["label"]),
+            callbacks=[early_stopping, checkpoint],
         )
 
     def evaluate(self) -> float:
@@ -130,12 +147,19 @@ class LSTMModel:
         _, test_acc = self.model.evaluate(self.test_pad, self.df_test["label"])
         return train_acc, val_acc, test_acc
 
+    def save_model(self) -> None:
+        """
+        save model
+        """
+        logger.info("saving model")
+        self.model.save("model/lstm.h5")
+
 
 if __name__ == "__main__":
     lstm = LSTMModel()
     lstm.tokenise()
     lstm.build_model()
-    lstm.train(epochs=5, batch_size=32)
+    lstm.train(epochs=30, batch_size=128)
     train_acc, val_acc, test_acc = lstm.evaluate()
     logger.info(
         "Train accuracy: %f; Val accuracy: %f; Test accuracy: %f",
@@ -143,3 +167,4 @@ if __name__ == "__main__":
         val_acc,
         test_acc,
     )
+    lstm.save_model()
